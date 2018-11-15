@@ -2,17 +2,18 @@
 """
 
 import logging
+from types import SimpleNamespace
 
 from treadmill import exc
 from . import aws
-
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def create_instance(ec2_conn, user_data, image_id, instance_type,
                     tags, secgroup_ids, subnet_id, disk, key=None,
-                    instance_profile=None, ip_address=None, eni=None):
+                    instance_profile=None, ip_address=None, eni=None,
+                    spot=False):
     """Create new instance."""
     args = {
         'TagSpecifications': tags,
@@ -26,8 +27,17 @@ def create_instance(ec2_conn, user_data, image_id, instance_type,
         }],
         'BlockDeviceMappings': [{
             'DeviceName': '/dev/sda1',
-            'Ebs': {'VolumeSize': disk, 'VolumeType': 'gp2'}}]
+            'Ebs': {'VolumeSize': disk, 'VolumeType': 'gp2'}}],
     }
+
+    if spot:
+        args['InstanceMarketOptions'] = {
+            'MarketType': 'spot',
+            'SpotOptions': {
+                'SpotInstanceType': 'one-time',
+                'InstanceInterruptionBehavior': 'terminate'
+            }
+        }
 
     if instance_profile:
         if instance_profile.startswith('arn:aws:iam::'):
@@ -60,7 +70,8 @@ def create_instance(ec2_conn, user_data, image_id, instance_type,
     return response
 
 
-def list_instances(ec2_conn, ids=None, tags=None, hostnames=None, state=None):
+def list_instances(ec2_conn, ids=None, tags=None, hostnames=None, state=None,
+                   spot=None):
     """List EC2 instances based on search criteria."""
     instances = []
     filters = []
@@ -86,7 +97,38 @@ def list_instances(ec2_conn, ids=None, tags=None, hostnames=None, state=None):
 
     for reservation in reservations:
         instances.extend(reservation['Instances'])
+
+    # working around a bug in instance-lifetime filter
+    if spot is True:
+        return list(filter(lambda r: 'InstanceLifecycle' in r, instances))
+    elif spot is False:
+        return list(filter(lambda r: 'InstanceLifecycle' not in r, instances))
     return instances
+
+
+def list_spot_requests(ec2_conn):
+    """Returns a list of object-like spot instance requests
+        # sir.status:
+        # open       The request is waiting to be fulfilled.
+        # active     The request is fulfilled and has an associated Instance
+        # failed     The request has one or more bad parameters.
+        # closed     The Spot Instance was interrupted or terminated.
+        # cancelled  You cancelled the request, or the request expired.
+    """
+    requests = []
+    sirs = ec2_conn.describe_spot_instance_requests()['SpotInstanceRequests']
+    for _ in sirs:
+        sir = SimpleNamespace()
+        sir.az = _['LaunchedAvailabilityZone']
+        sir.ami_id = _['LaunchSpecification']['ImageId']
+        sir.id = _['SpotInstanceRequestId']
+        sir.instance_id = _['InstanceId']
+        sir.instance_type = _['LaunchSpecification']['InstanceType']
+        sir.status = _['State']
+        iface = _['LaunchSpecification']['NetworkInterfaces'][0]
+        sir.subnet = iface['SubnetId']
+        requests.append(sir)
+    return requests
 
 
 def get_instance(ec2_conn, ids=None, tags=None, hostnames=None, state=None):
