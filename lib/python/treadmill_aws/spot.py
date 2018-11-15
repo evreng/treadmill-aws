@@ -21,14 +21,12 @@ def cores_of(instance_type):
 
 
 def get_latest_price(types, az):
-    price_list = GLOBAL.ec2.describe_spot_price_history(
+    return GLOBAL.ec2.describe_spot_price_history(
         InstanceTypes=types,
         AvailabilityZone=az,
         StartTime=datetime.now() - timedelta(days=1),
         EndTime=datetime.now(),
         ProductDescriptions=["Linux/UNIX"]).get('SpotPriceHistory')
-    if price_list:
-        return price_list
 
 
 def get_pricing(instance_types, availability_zones):
@@ -40,7 +38,7 @@ def get_pricing(instance_types, availability_zones):
             price = float(result.get('SpotPrice'))
             core_price = price / cores_of(instance_type)
             price_list[az][instance_type] = {"price": price,
-                                             "core_price":  core_price,
+                                             "core_price": core_price,
                                              "cores": cores_of(instance_type)}
     return price_list
 
