@@ -2,7 +2,7 @@
 """
 
 import logging
-from types import SimpleNamespace
+import types
 
 from treadmill import exc
 from . import aws
@@ -115,20 +115,16 @@ def list_spot_requests(ec2_conn):
         # closed     The Spot Instance was interrupted or terminated.
         # cancelled  You cancelled the request, or the request expired.
     """
-    requests = []
     sirs = ec2_conn.describe_spot_instance_requests()['SpotInstanceRequests']
-    for _ in sirs:
-        sir = SimpleNamespace()
-        sir.az = _['LaunchedAvailabilityZone']
-        sir.ami_id = _['LaunchSpecification']['ImageId']
-        sir.id = _['SpotInstanceRequestId']
-        sir.instance_id = _['InstanceId']
-        sir.instance_type = _['LaunchSpecification']['InstanceType']
-        sir.status = _['State']
-        iface = _['LaunchSpecification']['NetworkInterfaces'][0]
-        sir.subnet = iface['SubnetId']
-        requests.append(sir)
-    return requests
+    return [types.SimpleNamespace(
+        az=req['LaunchedAvailabilityZone'],
+        ami_id=req['LaunchSpecification']['ImageId'],
+        id=req['SpotInstanceRequestId'],
+        instance_id=req['InstanceId'],
+        instance_type=req['LaunchSpecification']['InstanceType'],
+        status=req['State'],
+        subnet=req['LaunchSpecification']['NetworkInterfaces'][0]['SubnetId'])
+        for req in sirs]
 
 
 def get_instance(ec2_conn, ids=None, tags=None, hostnames=None, state=None):

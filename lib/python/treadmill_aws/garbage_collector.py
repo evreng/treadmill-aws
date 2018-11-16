@@ -15,6 +15,7 @@ class LDAP:
     @staticmethod
     def list():
         """List LDAP server records that are not valid ec2 instances"""
+        _LOGGER.info('fetched server list from LDAP')
         client = admin.Server(context.GLOBAL.ldap.conn)
         return {host.get("_id") for host in client.list({})}
 
@@ -30,6 +31,7 @@ class IPA:
     @staticmethod
     def list():
         """List IPA server records that are not valid ec2 instances"""
+        _LOGGER.info('fetched server list from IPA')
         return set(GLOBAL.ipaclient.get_hosts())
 
     @staticmethod
